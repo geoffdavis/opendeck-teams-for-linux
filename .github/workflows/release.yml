@@ -1,0 +1,26 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl,aarch64-unknown-linux-musl
+      - run: pip3 install cargo-zigbuild
+      - run: cargo zigbuild --release --target x86_64-unknown-linux-musl
+      - run: cargo zigbuild --release --target aarch64-unknown-linux-musl
+      - run: scripts/assemble-plugin.sh
+      - run: cd dist && zip -r com.geoffdavis.teamsforlinux.sdPlugin.zip com.geoffdavis.teamsforlinux.sdPlugin
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/com.geoffdavis.teamsforlinux.sdPlugin.zip
+          generate_release_notes: true
