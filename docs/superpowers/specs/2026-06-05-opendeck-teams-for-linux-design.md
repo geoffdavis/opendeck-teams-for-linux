@@ -41,7 +41,8 @@ for declarative setups.
 
 ## Non-goals
 
-- TLS/remote MQTT brokers (the model is a localhost broker; revisit on demand).
+- TLS/remote MQTT brokers in v1 (the model is a localhost broker; planned as
+  a later release — see Future ideas).
 - Managing the broker, teams-for-linux `config.json`, or secrets — host
   concerns that stay in the consumer's config (e.g. `nix-oceaneering`).
 - Additional actions (camera, presence display) — the UUID scheme leaves room,
@@ -265,6 +266,9 @@ current nix module.)
 ## Future ideas (explicitly out of scope for v1)
 
 - OpenDeck store listing once teams-for-linux PR #2608 is merged.
+- TLS/remote broker support in a later release, via `rumqttc`'s `rustls`
+  feature (pure Rust — preserves static musl builds). Adds `mqtts://`-style
+  config (broker scheme or TLS toggle + optional CA path) to file and PI.
 - Optional use of the explicit `mute`/`unmute` commands (with `force`) instead
   of `toggle-mute`.
 - Additional actions: camera toggle, in-call indicator, presence display.
