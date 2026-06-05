@@ -1,3 +1,5 @@
+mod state;
+
 fn main() {
-	println!("opendeck-teams-for-linux: not yet implemented");
+    println!("opendeck-teams-for-linux: not yet implemented");
 }
