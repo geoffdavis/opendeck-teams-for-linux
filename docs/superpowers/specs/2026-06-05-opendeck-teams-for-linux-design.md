@@ -58,10 +58,11 @@ opendeck-teams-for-linux/
 ├── Cargo.toml / Cargo.lock
 ├── src/
 │   ├── main.rs                 # logging init, register action, openaction::run
-│   ├── action.rs               # ToggleMuteAction: key_up, will_appear/disappear, settings events
+│   ├── action.rs               # ToggleMuteAction: key_down, will_appear/disappear, settings events
 │   ├── mqtt.rs                 # rumqttc task: subscribe, publish, retry loop
 │   ├── settings.rs             # Settings struct + defaults < file < PI resolution
 │   └── state.rs                # pure state machine: payloads → state → display
+├── tests/protocol.rs           # e2e: mock OpenDeck WS + throwaway mosquitto + real binary
 ├── plugin/
 │   ├── manifest.json
 │   ├── pi/index.html           # property inspector (vanilla JS, sdpi-style layout)
@@ -259,8 +260,14 @@ current nix module.)
     behavior, and display mapping (incl. `SETUP`).
   - settings resolution: defaults < file < PI layering, `password_file`
     precedence, configured/unconfigured determination.
-- MQTT/WS plumbing stays thin and is exercised by compilation + manual
-  testing against the real stack (mosquitto + teams-for-linux + OpenDeck).
+- Protocol-level integration test (`tests/protocol.rs`): the real plugin
+  binary against a mock OpenDeck WebSocket server and a throwaway mosquitto
+  broker — registration, willAppear → display pushes, MQTT-driven title
+  transitions, keyDown → toggle-mute publish, not-in-call alert. Runs on any
+  machine and in CI; needed because the dev laptop has no OpenDeck install
+  (and OpenDeck is not in nixpkgs).
+- Final hardware smoke test against the real stack (mosquitto +
+  teams-for-linux + OpenDeck + deck) happens on the work machine post-release.
 - CI runs fmt/clippy/test on every PR.
 
 ## Future ideas (explicitly out of scope for v1)
