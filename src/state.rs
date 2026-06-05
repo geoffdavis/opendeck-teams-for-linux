@@ -38,6 +38,7 @@ impl MicState {
     }
 
     /// Apply an MQTT payload. Returns true if the state changed.
+    #[must_use = "returns false if the payload caused no state change"]
     pub fn apply(&mut self, topic: StateTopic, payload: &str) -> bool {
         let before = *self;
         match topic {
