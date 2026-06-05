@@ -78,7 +78,8 @@ repository = "https://github.com/geoffdavis/opendeck-teams-for-linux"
 
 [dependencies]
 openaction = "2.6"
-rumqttc = "0.25"
+# default-features off: drops rustls/aws-lc-sys (needs external cmake). Plain-TCP v1.
+rumqttc = { version = "0.25", default-features = false }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
