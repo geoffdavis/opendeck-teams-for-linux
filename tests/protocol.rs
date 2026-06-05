@@ -217,4 +217,12 @@ async fn plugin_speaks_protocol_end_to_end() {
         .await
         .unwrap();
     expect_message(&mut ws, "showAlert", |v| v["event"] == "showAlert").await;
+
+    // The guard must not have published anything: give a stray frame time to
+    // arrive, then assert the command channel stayed empty.
+    sleep(Duration::from_millis(300)).await;
+    assert!(
+        cmd_rx.try_recv().is_err(),
+        "keyDown outside a call must not publish to the command topic"
+    );
 }
