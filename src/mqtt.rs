@@ -80,18 +80,21 @@ impl MqttController {
 
     /// Handle a key press. Returns true if toggle-mute was published.
     pub async fn key_pressed(&self) -> bool {
-        let inner = self.inner.lock().await;
-        let input = *self.display_tx.borrow();
-        if !state::can_toggle(input.mic, input.configured) {
-            log::info!("ignoring key press: not in a call (or unconfigured)");
-            return false;
-        }
-        let (Some(resolved), Some(client)) = (&inner.resolved, &inner.client) else {
-            return false;
-        };
+        let (command_topic, client) = {
+            let inner = self.inner.lock().await;
+            let input = *self.display_tx.borrow();
+            if !state::can_toggle(input.mic, input.configured) {
+                log::info!("ignoring key press: not in a call (or unconfigured)");
+                return false;
+            }
+            let (Some(resolved), Some(client)) = (&inner.resolved, &inner.client) else {
+                return false;
+            };
+            (resolved.command_topic(), client.clone())
+        }; // inner guard dropped here — publish must not hold the lock
         match client
             .publish(
-                resolved.command_topic(),
+                command_topic,
                 QoS::AtLeastOnce,
                 false,
                 r#"{"action":"toggle-mute"}"#,
@@ -111,7 +114,7 @@ impl MqttController {
 }
 
 /// Spawn the connection task: subscribe on connect, fold publishes into state,
-/// retry forever with 5s backoff on errors.
+/// retry forever with a fixed 5s delay on errors.
 fn spawn_mqtt(
     resolved: Resolved,
     display_tx: watch::Sender<DisplayInput>,
