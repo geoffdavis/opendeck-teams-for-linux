@@ -1,3 +1,4 @@
+mod mqtt;
 mod settings;
 mod state;
 
