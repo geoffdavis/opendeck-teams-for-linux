@@ -1,3 +1,4 @@
+mod settings;
 mod state;
 
 fn main() {
