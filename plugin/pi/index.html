@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Teams for Linux — Toggle Mute settings</title>
+<style>
+	:root { color-scheme: dark; }
+	body {
+		font-family: system-ui, sans-serif;
+		background: #2d2d2d;
+		color: #d8d8d8;
+		font-size: 13px;
+		margin: 8px;
+	}
+	.field { display: flex; align-items: center; margin-bottom: 6px; }
+	.field label { flex: 0 0 110px; }
+	.field input {
+		flex: 1;
+		background: #3d3d3d;
+		color: #d8d8d8;
+		border: 1px solid #555;
+		border-radius: 4px;
+		padding: 4px 6px;
+	}
+	details { margin-top: 10px; }
+	summary { cursor: pointer; color: #aaa; }
+	.hint { color: #888; font-size: 11px; margin-top: 10px; }
+	code { color: #aaa; }
+</style>
+</head>
+<body>
+	<div class="field"><label for="broker_host">Broker host</label><input id="broker_host"></div>
+	<div class="field"><label for="broker_port">Broker port</label><input id="broker_port" inputmode="numeric"></div>
+	<div class="field"><label for="username">Username</label><input id="username"></div>
+	<div class="field"><label for="password">Password</label><input id="password" type="password"></div>
+	<div class="field"><label for="topic_prefix">Topic prefix</label><input id="topic_prefix"></div>
+	<details>
+		<summary>Advanced: topic overrides</summary>
+		<div class="field"><label for="microphone_topic">Microphone</label><input id="microphone_topic"></div>
+		<div class="field"><label for="microphone_control_topic">Mic control</label><input id="microphone_control_topic"></div>
+		<div class="field"><label for="in_call_topic">In call</label><input id="in_call_topic"></div>
+		<div class="field"><label for="command_topic">Command</label><input id="command_topic"></div>
+	</details>
+	<p class="hint">
+		Empty fields inherit from <code>~/.config/opendeck-teams-for-linux/config.toml</code>
+		or built-in defaults; placeholders show the effective values.
+	</p>
+<script>
+	const FIELDS = [
+		"broker_host", "broker_port", "username", "password", "topic_prefix",
+		"microphone_topic", "microphone_control_topic", "in_call_topic", "command_topic",
+	];
+	let ws = null;
+	let ctx = null;
+	let saveTimer = null;
+
+	// Called by OpenDeck's injected shim (Stream Deck SDK compatible entry point).
+	function connectElgatoStreamDeckSocket(inPort, inUUID, inRegisterEvent, inInfo, inActionInfo) {
+		ctx = inUUID;
+		const actionInfo = JSON.parse(inActionInfo);
+		populate(actionInfo.payload?.settings ?? {});
+		ws = new WebSocket("ws://127.0.0.1:" + inPort);
+		ws.onopen = () => ws.send(JSON.stringify({ event: inRegisterEvent, uuid: inUUID }));
+		ws.onmessage = (e) => {
+			const msg = JSON.parse(e.data);
+			if (msg.event === "didReceiveSettings") {
+				populate(msg.payload?.settings ?? {});
+			} else if (msg.event === "sendToPropertyInspector" && msg.payload?.event === "effectiveSettings") {
+				placeholders(msg.payload);
+			}
+		};
+	}
+
+	function populate(settings) {
+		for (const f of FIELDS) document.getElementById(f).value = settings[f] ?? "";
+	}
+
+	function placeholders(eff) {
+		for (const f of FIELDS) {
+			if (f === "password") continue;
+			document.getElementById(f).placeholder = eff[f] ?? "";
+		}
+		document.getElementById("password").placeholder = eff.password_set ? "(set)" : "";
+	}
+
+	function save() {
+		if (!ws || ws.readyState !== WebSocket.OPEN) return;
+		const settings = {};
+		for (const f of FIELDS) settings[f] = document.getElementById(f).value.trim();
+		ws.send(JSON.stringify({ event: "setSettings", context: ctx, payload: settings }));
+	}
+
+	for (const f of FIELDS) {
+		document.getElementById(f).addEventListener("input", () => {
+			clearTimeout(saveTimer);
+			saveTimer = setTimeout(save, 300);
+		});
+	}
+</script>
+</body>
+</html>

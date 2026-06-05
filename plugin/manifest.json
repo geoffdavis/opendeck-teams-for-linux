@@ -1,0 +1,28 @@
+{
+	"Name": "Teams for Linux",
+	"Author": "Geoff Davis",
+	"Version": "0.1.0",
+	"Category": "Teams",
+	"Icon": "icons/icon",
+	"SDKVersion": 2,
+	"OS": [{ "Platform": "linux" }],
+	"CodePaths": {
+		"x86_64-unknown-linux-gnu": "bin/plugin-x86_64",
+		"aarch64-unknown-linux-gnu": "bin/plugin-aarch64"
+	},
+	"Actions": [
+		{
+			"UUID": "com.geoffdavis.teamsforlinux.toggle-mute",
+			"Name": "Toggle Mute (Teams)",
+			"Icon": "icons/icon",
+			"Tooltip": "Toggle Microsoft Teams microphone mute via MQTT (teams-for-linux)",
+			"Controllers": ["Keypad"],
+			"DisableAutomaticStates": true,
+			"PropertyInspectorPath": "pi/index.html",
+			"States": [
+				{ "Image": "icons/icon", "Title": "MIC", "FontSize": 18, "TitleColor": "#FFFFFF" },
+				{ "Image": "icons/icon-muted", "Title": "MUTED", "FontSize": 18, "TitleColor": "#FF4040" }
+			]
+		}
+	]
+}
