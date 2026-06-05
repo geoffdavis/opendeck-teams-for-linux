@@ -97,7 +97,11 @@ pub fn config_file_path() -> PathBuf {
         .map(PathBuf::from)
         .filter(|p| p.is_absolute())
         .unwrap_or_else(|| {
-            PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(".config")
+            std::env::var_os("HOME")
+                .filter(|home| !home.is_empty())
+                .map(PathBuf::from)
+                .unwrap_or_else(|| PathBuf::from("/"))
+                .join(".config")
         });
     base.join("opendeck-teams-for-linux").join("config.toml")
 }
@@ -115,8 +119,11 @@ pub fn load_file_settings(path: &Path) -> Option<FileSettings> {
     };
     if let Some(pw_path) = &file.password_file {
         match std::fs::read_to_string(pw_path) {
-            Ok(pw) => file.password = Some(pw.trim_end().to_string()),
-            Err(err) => log::warn!("failed to read password_file: {err}"),
+            Ok(pw) => {
+                // trim_end only: leading whitespace in a password is intentional.
+                file.password = Some(pw.trim_end().to_string());
+            }
+            Err(err) => log::warn!("failed to read password_file ({pw_path}): {err}"),
         }
     }
     Some(file)
@@ -166,11 +173,16 @@ mod tests {
 
     #[test]
     fn any_set_ignores_whitespace_but_sees_values() {
-        let mut pi = PiSettings::default();
-        pi.username = "  ".into();
-        assert!(!pi.any_set());
-        pi.username = "geoff".into();
-        assert!(pi.any_set());
+        let pi_ws = PiSettings {
+            username: "  ".into(),
+            ..Default::default()
+        };
+        assert!(!pi_ws.any_set());
+        let pi_val = PiSettings {
+            username: "geoff".into(),
+            ..Default::default()
+        };
+        assert!(pi_val.any_set());
     }
 
     #[test]
@@ -218,8 +230,10 @@ mod tests {
             username: Some("file-user".into()),
             ..Default::default()
         };
-        let mut pi = PiSettings::default();
-        pi.username = "pi-user".into();
+        let pi = PiSettings {
+            username: "pi-user".into(),
+            ..Default::default()
+        };
         let r = resolve(Some(&file), &pi);
         assert_eq!(r.broker_host, "10.0.0.5"); // empty PI field inherits
         assert_eq!(r.username, "pi-user"); // non-empty PI field wins
@@ -227,8 +241,10 @@ mod tests {
 
     #[test]
     fn resolve_pi_only_marks_configured() {
-        let mut pi = PiSettings::default();
-        pi.broker_host = "127.0.0.1".into();
+        let pi = PiSettings {
+            broker_host: "127.0.0.1".into(),
+            ..Default::default()
+        };
         let r = resolve(None, &pi);
         assert!(r.configured);
     }
@@ -239,8 +255,10 @@ mod tests {
             broker_port: Some(2000),
             ..Default::default()
         };
-        let mut pi = PiSettings::default();
-        pi.broker_port = "not-a-port".into();
+        let pi = PiSettings {
+            broker_port: "not-a-port".into(),
+            ..Default::default()
+        };
         let r = resolve(Some(&file), &pi);
         assert_eq!(r.broker_port, 2000);
     }
