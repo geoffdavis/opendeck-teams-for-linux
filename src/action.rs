@@ -32,11 +32,9 @@ fn icon_data_uri(icon: Icon) -> &'static str {
 
 pub async fn push_display(instance: &Instance, display: Display) -> OpenActionResult<()> {
     instance.set_state(display.state_index).await?;
+    instance.set_title(Some(display.title), None).await?;
     instance
-        .set_title(Some(display.title.to_string()), None)
-        .await?;
-    instance
-        .set_image(Some(icon_data_uri(display.icon).to_string()), None)
+        .set_image(Some(icon_data_uri(display.icon)), None)
         .await
 }
 
@@ -100,6 +98,9 @@ impl Action for ToggleMuteAction {
         _settings: &Self::Settings,
     ) -> OpenActionResult<()> {
         // Report effective values so the PI can show them as placeholders.
+        // Deliberate exposure: broker host/username go to the PI form over the
+        // local OpenDeck WebSocket only (not logged, not persisted by us);
+        // the password itself is never sent, only a set/unset flag.
         if let Some(resolved) = self.controller.resolved().await {
             instance
                 .send_to_property_inspector(serde_json::json!({
