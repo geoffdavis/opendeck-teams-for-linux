@@ -86,7 +86,7 @@ opendeck-teams-for-linux/
   The action layer watches it and pushes `set_state` / `set_title` /
   `set_image` to every visible instance (tracked via
   `will_appear`/`will_disappear`).
-- `key_up` publishes `{"action":"toggle-mute"}` (QoS 1) to the command topic,
+- `key_down` publishes `{"action":"toggle-mute"}` (QoS 1) to the command topic,
   guarded by in-call state.
 
 ### State machine (parity with the Python plugin)
