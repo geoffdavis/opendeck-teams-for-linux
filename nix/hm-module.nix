@@ -41,8 +41,18 @@ in {
   };
 
   config = lib.mkIf cfg.enable {
-    xdg.configFile."opendeck/plugins/${pluginId}".source =
-      "${cfg.package}/share/opendeck-teams-for-linux/${pluginId}";
+    # OpenDeck chmods the plugin binary (set_permissions 0o755) during plugin
+    # initialisation, which fails with EROFS on a symlink into the read-only
+    # nix store — so install a writable COPY instead of linking. Re-copied on
+    # every activation; the source generation changing is what makes $VERBOSE
+    # diffs cheap and the copy idempotent.
+    home.activation.opendeckTeamsForLinuxPlugin = lib.hm.dag.entryAfter ["writeBoundary"] ''
+      _plugin_dir="${config.xdg.configHome}/opendeck/plugins/${pluginId}"
+      run rm -rf "$_plugin_dir"
+      run mkdir -p "$_plugin_dir"
+      run cp -rT "${cfg.package}/share/opendeck-teams-for-linux/${pluginId}" "$_plugin_dir"
+      run chmod -R u+w "$_plugin_dir"
+    '';
 
     xdg.configFile."opendeck-teams-for-linux/config.toml" = lib.mkIf (cfg.settings != {}) {
       source = tomlFormat.generate "opendeck-teams-for-linux-config.toml" cfg.settings;
