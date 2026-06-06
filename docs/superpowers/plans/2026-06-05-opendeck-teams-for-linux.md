@@ -15,7 +15,7 @@
 - The PI page defines the standard global `connectElgatoStreamDeckSocket(inPort, inUUID, inRegisterEvent, inInfo, inActionInfo)`; OpenDeck's webserver injects a shim that calls it. Register event is `registerPropertyInspector`. PI talks to the same WebSocket port: `setSettings` out; `didReceiveSettings` / `sendToPropertyInspector` in.
 - `openaction::run(args)` parses `-port`/`-pluginuuid`/`-registerevent`/`-info` flags itself.
 
-**Out of scope for this plan (tracked in the spec):** TLS (post-v1 release), OpenDeck store listing (after teams-for-linux PR #2608 merges), and the `nix-oceaneering` migration (separate follow-up plan in that repo — see spec § Migration plan).
+**Out of scope for this plan (tracked in the spec):** TLS (post-v1 release), OpenDeck store listing (after teams-for-linux PR #2608 merges), and the consumer-repo migration (separate follow-up plan in that repo — see spec § Migration plan).
 
 **Working directory for all tasks:** `~/src/opendeck-teams-for-linux` (repo already exists with the spec committed).
 
@@ -179,14 +179,14 @@ git commit -m "chore: scaffold cargo project, flake devShell, direnv, MIT licens
 - Create: `scripts/generate-icons.sh`
 - Create (generated): `plugin/icons/icon.png`, `icon@2x.png`, `icon-off.png`, `icon-off@2x.png`, `icon-muted.png`, `icon-muted@2x.png`
 
-This ports the `drawIcon` imagemagick derivations from `nix-oceaneering/modules/teams-for-linux.nix` 1:1 (purple mic = active, grey = off, red slash overlay = muted).
+This ports the `drawIcon` imagemagick derivations from the consumer repo's `modules/teams-for-linux.nix` 1:1 (purple mic = active, grey = off, red slash overlay = muted).
 
 - [ ] **Step 1: Write `scripts/generate-icons.sh`**
 
 ```bash
 #!/usr/bin/env bash
 # Regenerate the plugin button icons with imagemagick.
-# Ported from the original nix drawIcon derivations (nix-oceaneering).
+# Ported from the original nix drawIcon derivations.
 set -euo pipefail
 cd "$(dirname "$0")/../plugin/icons"
 
@@ -2146,7 +2146,7 @@ both `bin/plugin-*` binaries, icons, and `pi/index.html`.
 
 ### Follow-up A: Hardware smoke test (work machine — the only box with OpenDeck + deck + Teams stack)
 
-After v0.1.0 is released, on the machine managed by `nix-oceaneering`:
+After v0.1.0 is released, on the machine managed by the consumer repo:
 
 1. Download and unzip the release into `~/.config/opendeck/plugins/` (next to
    the existing `com.gdavis.teamsmute.sdPlugin` — different UUID, no conflict):
@@ -2185,10 +2185,10 @@ After v0.1.0 is released, on the machine managed by `nix-oceaneering`:
    mosquitto_pub -u teams-for-linux -P "$PW" -t teams/microphone/control -r -n
    ```
 
-### Follow-up B: nix-oceaneering migration (separate plan, different repo)
+### Follow-up B: consumer-repo migration (separate plan, different repo)
 
-Migrate `nix-oceaneering` to consume the published flake (HM module +
+Migrate the consumer repo to consume the published flake (HM module +
 `settings`), delete `modules/teams-mute-plugin.py` and the plugin wiring in
 `modules/teams-for-linux.nix`, and remove the old `com.gdavis.teamsmute`
-button — see spec § "Migration plan (nix-oceaneering)". Do this only after
+button — see spec § "Migration plan (consumer repo)". Do this only after
 Follow-up A passes.

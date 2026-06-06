@@ -7,7 +7,7 @@
 ## Context
 
 An OpenDeck (Stream Deck) mute button for [teams-for-linux](https://github.com/IsmaelMartinez/teams-for-linux)
-currently lives as a private Python script + Nix module inside `nix-oceaneering`
+currently lives as a private Python script + Nix module inside a private consumer repo
 (`modules/teams-mute-plugin.py`, `modules/teams-for-linux.nix`). It rides on
 teams-for-linux's MQTT integration — specifically the `microphone/control` state
 topic and command topic introduced in teams-for-linux PR #2608 — to show live
@@ -44,7 +44,7 @@ for declarative setups.
 - TLS/remote MQTT brokers in v1 (the model is a localhost broker; planned as
   a later release — see Future ideas).
 - Managing the broker, teams-for-linux `config.json`, or secrets — host
-  concerns that stay in the consumer's config (e.g. `nix-oceaneering`).
+  concerns that stay in the consumer's config (e.g. the consumer repos).
 - Additional actions (camera, presence display) — the UUID scheme leaves room,
   but v1 ships only toggle-mute.
 - OpenDeck store listing (deferred; see Decisions).
@@ -229,7 +229,7 @@ current nix module.)
   imagemagick. Paired with `.envrc` (`use flake`) per the nix-direnv
   convention on birdrock (dev tooling stays out of the global environment).
 
-## Migration plan (`nix-oceaneering`)
+## Migration plan (consumer repo)
 
 1. Add `opendeck-teams-for-linux` as a flake input; import the HM module;
    set `settings` (password via the existing op-CLI activation pattern, now
@@ -237,7 +237,7 @@ current nix module.)
 2. Delete from `modules/teams-for-linux.nix`: the plugin script, `writePython3Bin`
    wiring, icon derivations, plugin `xdg.configFile` entries, and the
    `mqtt.env` block. Delete `modules/teams-mute-plugin.py`.
-3. Keep in `nix-oceaneering`: mosquitto service + passwordfile,
+3. Keep in the consumer repo: mosquitto service + passwordfile,
    teams-for-linux `config.json` generation, dev-overlay. These are host
    concerns.
 4. Re-add the button once in OpenDeck (UUID changed from

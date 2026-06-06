@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Regenerate the plugin button icons with imagemagick.
-# Ported from the original nix drawIcon derivations (nix-oceaneering).
+# Ported from the original nix drawIcon derivations.
 set -euo pipefail
 cd "$(dirname "$0")/../plugin/icons"
 
