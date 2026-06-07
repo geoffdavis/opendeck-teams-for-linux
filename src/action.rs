@@ -1,51 +1,40 @@
-//! OpenAction integration: the toggle-mute action and display pushing.
+//! OpenAction integration: a generic toggle-control action and display pushing.
+//!
+//! [`ToggleControlAction`] is parameterised by a [`Control`], so every Teams
+//! action (mute today; camera/hand/blur later) shares one implementation. New
+//! controls are wired up in [`register_controls`].
 
+use crate::control::{Control, MuteControl};
 use crate::mqtt::{DisplayInput, MqttController};
-use crate::state::{Display, Icon};
+use crate::state::Display;
 
-use base64::Engine as _;
-use openaction::{Action, Instance, OpenActionResult, async_trait, visible_instances};
-use std::sync::{Arc, LazyLock};
+use openaction::{
+    Action, Instance, OpenActionResult, async_trait, register_action, visible_instances,
+};
+use std::marker::PhantomData;
+use std::sync::Arc;
 use tokio::sync::watch;
 
-fn png_data_uri(bytes: &[u8]) -> String {
-    format!(
-        "data:image/png;base64,{}",
-        base64::engine::general_purpose::STANDARD.encode(bytes)
-    )
-}
-
-static ICON_NORMAL: LazyLock<String> =
-    LazyLock::new(|| png_data_uri(include_bytes!("../plugin/icons/icon@2x.png")));
-static ICON_MUTED: LazyLock<String> =
-    LazyLock::new(|| png_data_uri(include_bytes!("../plugin/icons/icon-muted@2x.png")));
-static ICON_OFF: LazyLock<String> =
-    LazyLock::new(|| png_data_uri(include_bytes!("../plugin/icons/icon-off@2x.png")));
-
-fn icon_data_uri(icon: Icon) -> &'static str {
-    match icon {
-        Icon::Normal => &ICON_NORMAL,
-        Icon::Muted => &ICON_MUTED,
-        Icon::Off => &ICON_OFF,
-    }
-}
-
-pub async fn push_display(instance: &Instance, display: Display) -> OpenActionResult<()> {
+/// Push one control's display (state index, title, image) to a single key.
+pub async fn push_display<C: Control>(
+    instance: &Instance,
+    display: Display,
+) -> OpenActionResult<()> {
     instance.set_state(display.state_index).await?;
     instance.set_title(Some(display.title), None).await?;
     instance
-        .set_image(Some(icon_data_uri(display.icon)), None)
+        .set_image(Some(C::icon_data_uri(display.icon)), None)
         .await
 }
 
-/// Watch for state changes and refresh every visible instance.
-pub fn spawn_display_pusher(mut display_rx: watch::Receiver<DisplayInput>) {
+/// Watch for state changes and refresh every visible instance of control `C`.
+pub fn spawn_display_pusher<C: Control>(mut display_rx: watch::Receiver<DisplayInput>) {
     tokio::spawn(async move {
         while display_rx.changed().await.is_ok() {
             let input = *display_rx.borrow_and_update();
-            let display = crate::state::display(input.mic, input.configured);
-            for instance in visible_instances(ToggleMuteAction::UUID).await {
-                if let Err(err) = push_display(&instance, display).await {
+            let display = C::display(input.mic, input.configured);
+            for instance in visible_instances(C::UUID).await {
+                if let Err(err) = push_display::<C>(&instance, display).await {
                     log::warn!("display push failed: {err}");
                 }
             }
@@ -53,13 +42,41 @@ pub fn spawn_display_pusher(mut display_rx: watch::Receiver<DisplayInput>) {
     });
 }
 
-pub struct ToggleMuteAction {
-    pub controller: Arc<MqttController>,
+/// Register every control with OpenAction. This is the single place a new
+/// toggle control is added to the plugin.
+pub async fn register_controls() {
+    // Each control currently shares the mic/in-call state from its own
+    // connection; a shared MQTT connection across controls is tracked
+    // separately. For now there is one control.
+    let (controller, display_rx) = MqttController::new();
+    spawn_display_pusher::<MuteControl>(display_rx);
+    register_action(ToggleControlAction::<MuteControl>::new(controller)).await;
+}
+
+/// Generic OpenDeck action for a [`Control`]: publishes the control's command
+/// on press and mirrors live Teams state onto the key.
+pub struct ToggleControlAction<C: Control> {
+    controller: Arc<MqttController>,
+    _control: PhantomData<C>,
+}
+
+impl<C: Control> ToggleControlAction<C> {
+    pub fn new(controller: Arc<MqttController>) -> Self {
+        Self {
+            controller,
+            _control: PhantomData,
+        }
+    }
+
+    async fn push_current(&self, instance: &Instance) -> OpenActionResult<()> {
+        let input = self.controller.current_input();
+        push_display::<C>(instance, C::display(input.mic, input.configured)).await
+    }
 }
 
 #[async_trait]
-impl Action for ToggleMuteAction {
-    const UUID: &'static str = "com.geoffdavis.teamsforlinux.toggle-mute";
+impl<C: Control> Action for ToggleControlAction<C> {
+    const UUID: &'static str = C::UUID;
     type Settings = crate::settings::PiSettings;
 
     async fn will_appear(
@@ -68,7 +85,7 @@ impl Action for ToggleMuteAction {
         settings: &Self::Settings,
     ) -> OpenActionResult<()> {
         self.controller.apply_settings(settings).await;
-        push_display(instance, self.controller.current_display()).await
+        self.push_current(instance).await
     }
 
     async fn did_receive_settings(
@@ -77,7 +94,7 @@ impl Action for ToggleMuteAction {
         settings: &Self::Settings,
     ) -> OpenActionResult<()> {
         self.controller.apply_settings(settings).await;
-        push_display(instance, self.controller.current_display()).await
+        self.push_current(instance).await
     }
 
     async fn key_down(
@@ -85,7 +102,11 @@ impl Action for ToggleMuteAction {
         instance: &Instance,
         _settings: &Self::Settings,
     ) -> OpenActionResult<()> {
-        if !self.controller.key_pressed().await {
+        if !self
+            .controller
+            .key_pressed(C::COMMAND, C::can_activate)
+            .await
+        {
             // Not in a call / unconfigured / publish failure: flash the warning triangle.
             instance.show_alert().await?;
         }

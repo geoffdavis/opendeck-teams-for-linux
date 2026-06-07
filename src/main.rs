@@ -1,9 +1,10 @@
 mod action;
+mod control;
 mod mqtt;
 mod settings;
 mod state;
 
-use openaction::{OpenActionResult, register_action, run};
+use openaction::{OpenActionResult, run};
 
 #[tokio::main]
 async fn main() -> OpenActionResult<()> {
@@ -16,9 +17,7 @@ async fn main() -> OpenActionResult<()> {
         eprintln!("logger initialization failed: {err}");
     }
 
-    let (controller, display_rx) = mqtt::MqttController::new();
-    action::spawn_display_pusher(display_rx);
-    register_action(action::ToggleMuteAction { controller }).await;
+    action::register_controls().await;
 
     run(std::env::args().collect()).await
 }
