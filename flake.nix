@@ -50,7 +50,7 @@
           clippy
           rustfmt
           rust-analyzer
-          imagemagick
+          (python3.withPackages (ps: [ps.pillow]))
           zip
           jq
           mosquitto

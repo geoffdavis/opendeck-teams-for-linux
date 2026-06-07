@@ -106,7 +106,7 @@ activation script reading your secrets manager).
 ## Development
 
 ```bash
-direnv allow          # rust toolchain, imagemagick, mosquitto via nix-direnv
+direnv allow          # rust toolchain, python+pillow, mosquitto via nix-direnv
 cargo test            # state machine + settings resolution + e2e protocol test
 cargo build --release
 scripts/assemble-plugin.sh   # -> dist/com.geoffdavis.teamsforlinux.sdPlugin

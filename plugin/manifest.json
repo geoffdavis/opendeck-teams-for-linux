@@ -3,7 +3,7 @@
 	"Author": "Geoff Davis",
 	"Version": "0.1.0",
 	"Category": "Teams",
-	"Icon": "icons/icon",
+	"Icon": "icons/plugin",
 	"SDKVersion": 2,
 	"OS": [{ "Platform": "linux" }],
 	"CodePaths": {
