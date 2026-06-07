@@ -71,9 +71,9 @@ impl Control for MuteControl {
 
     fn icon_data_uri(icon: Icon) -> &'static str {
         match icon {
-            Icon::Normal => &MUTE_NORMAL,
-            Icon::Muted => &MUTE_MUTED,
-            Icon::Off => &MUTE_OFF,
+            Icon::Normal => MUTE_NORMAL.as_str(),
+            Icon::Muted => MUTE_MUTED.as_str(),
+            Icon::Off => MUTE_OFF.as_str(),
         }
     }
 }

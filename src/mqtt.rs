@@ -89,7 +89,7 @@ impl MqttController {
             let inner = self.inner.lock().await;
             let input = *self.display_tx.borrow();
             if !can_activate(input.mic, input.configured) {
-                log::info!("ignoring key press: control inactive (not in a call / unconfigured)");
+                log::info!("ignoring key press: control not active for the current Teams state");
                 return false;
             }
             let (Some(resolved), Some(client)) = (&inner.resolved, &inner.client) else {
@@ -98,7 +98,7 @@ impl MqttController {
             (resolved.command_topic(), client.clone())
         }; // inner guard dropped here — publish must not hold the lock
         match client
-            .publish(command_topic, QoS::AtLeastOnce, false, command.to_owned())
+            .publish(command_topic, QoS::AtLeastOnce, false, command.as_bytes())
             .await
         {
             Ok(()) => {
