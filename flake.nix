@@ -14,7 +14,7 @@
     packages = eachSystem (pkgs: {
       default = pkgs.rustPlatform.buildRustPackage {
         pname = "opendeck-teams-for-linux";
-        version = "0.1.0";
+        version = "0.1.1";
         src = self;
         cargoLock.lockFile = ./Cargo.lock;
 
@@ -50,7 +50,7 @@
           clippy
           rustfmt
           rust-analyzer
-          imagemagick
+          (python3.withPackages (ps: [ps.pillow]))
           zip
           jq
           mosquitto
