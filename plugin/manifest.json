@@ -1,7 +1,7 @@
 {
 	"Name": "Teams for Linux",
 	"Author": "Geoff Davis",
-	"Version": "0.1.0",
+	"Version": "0.1.1",
 	"Category": "Teams",
 	"Icon": "icons/plugin",
 	"SDKVersion": 2,
