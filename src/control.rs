@@ -1,9 +1,9 @@
 //! Generic "toggle control" abstraction shared by every Teams action.
 //!
-//! Each OpenDeck action this plugin exposes — mute today; camera, hand-raise
+//! Each OpenDeck action this plugin exposes — mute and camera today; hand-raise
 //! and blur planned — is structurally the same *toggle control*: pressing the
-//! key publishes a fixed JSON command to teams-for-linux over MQTT, and the
-//! key reflects a piece of live Teams state. Each control owns its full
+//! key publishes a fixed JSON command to teams-for-linux over MQTT, and the key
+//! reflects a piece of live Teams state. Each control owns its full
 //! state → display mapping (titles + images), so the generic runtime
 //! ([`MqttController`], the display pusher) never branches on a specific
 //! control. Adding a control is a small `impl` plus a registry entry in
@@ -11,7 +11,7 @@
 //!
 //! [`MqttController`]: crate::mqtt::MqttController
 
-use crate::state::MicState;
+use crate::state::TeamsState;
 
 use base64::Engine as _;
 use std::sync::LazyLock;
@@ -46,13 +46,19 @@ pub trait Control: Send + Sync + 'static {
 
     /// Map the current Teams state to what the key should show, including the
     /// resolved image for this control.
-    fn display(state: MicState, configured: bool) -> Display;
+    fn display(state: TeamsState, configured: bool) -> Display;
 
     /// Whether a key press should publish [`COMMAND`](Self::COMMAND) right now.
-    fn can_activate(state: MicState, configured: bool) -> bool;
+    fn can_activate(state: TeamsState, configured: bool) -> bool;
 }
 
-/// Microphone mute/unmute — the original (and currently only) control.
+/// In a call, configured, and connected — the precondition every control shares
+/// before it will act on a press.
+fn ready(state: TeamsState, configured: bool) -> bool {
+    configured && state.in_active_call()
+}
+
+/// Microphone mute/unmute.
 pub struct MuteControl;
 
 static MUTE_NORMAL: LazyLock<String> =
@@ -66,9 +72,7 @@ impl Control for MuteControl {
     const UUID: &'static str = "com.geoffdavis.teamsforlinux.toggle-mute";
     const COMMAND: &'static str = r#"{"action":"toggle-mute"}"#;
 
-    fn display(state: MicState, configured: bool) -> Display {
-        // SETUP: not configured yet. OFF: not in a call (presses are ignored).
-        // Otherwise reflect the live mute state on state index 1 (muted) or 0.
+    fn display(state: TeamsState, configured: bool) -> Display {
         if !configured {
             Display {
                 state_index: 0,
@@ -96,8 +100,56 @@ impl Control for MuteControl {
         }
     }
 
-    fn can_activate(state: MicState, configured: bool) -> bool {
-        configured && state.in_active_call()
+    fn can_activate(state: TeamsState, configured: bool) -> bool {
+        ready(state, configured)
+    }
+}
+
+/// Camera on/off (Teams "toggle video").
+pub struct CameraControl;
+
+static CAM_ON: LazyLock<String> =
+    LazyLock::new(|| png_data_uri(include_bytes!("../plugin/icons/cam@2x.png")));
+static CAM_OFF: LazyLock<String> =
+    LazyLock::new(|| png_data_uri(include_bytes!("../plugin/icons/cam-off@2x.png")));
+static CAM_DISABLED: LazyLock<String> =
+    LazyLock::new(|| png_data_uri(include_bytes!("../plugin/icons/cam-disabled@2x.png")));
+
+impl Control for CameraControl {
+    const UUID: &'static str = "com.geoffdavis.teamsforlinux.toggle-camera";
+    const COMMAND: &'static str = r#"{"action":"toggle-video"}"#;
+
+    fn display(state: TeamsState, configured: bool) -> Display {
+        if !configured {
+            Display {
+                state_index: 0,
+                title: "SETUP",
+                image: CAM_DISABLED.as_str(),
+            }
+        } else if !state.in_active_call() {
+            Display {
+                state_index: 0,
+                title: "OFF",
+                image: CAM_DISABLED.as_str(),
+            }
+        } else if state.camera_on == Some(true) {
+            Display {
+                state_index: 0,
+                title: "CAM",
+                image: CAM_ON.as_str(),
+            }
+        } else {
+            // In a call but camera off (or not yet reported).
+            Display {
+                state_index: 1,
+                title: "CAM OFF",
+                image: CAM_OFF.as_str(),
+            }
+        }
+    }
+
+    fn can_activate(state: TeamsState, configured: bool) -> bool {
+        ready(state, configured)
     }
 }
 
@@ -105,12 +157,15 @@ impl Control for MuteControl {
 mod tests {
     use super::*;
 
-    fn in_call(muted: bool) -> MicState {
-        MicState {
+    fn in_call(muted: bool) -> TeamsState {
+        TeamsState {
             muted,
             in_call: Some(true),
+            camera_on: None,
         }
     }
+
+    // -- mute --
 
     #[test]
     fn mute_control_command_and_uuid() {
@@ -123,68 +178,92 @@ mod tests {
 
     #[test]
     fn mute_display_setup_when_unconfigured() {
-        let d = MuteControl::display(MicState::default(), false);
+        let d = MuteControl::display(TeamsState::default(), false);
         assert_eq!(d.title, "SETUP");
-        assert_eq!(d.state_index, 0);
-    }
-
-    #[test]
-    fn mute_display_off_when_not_in_call_even_if_muted() {
-        let d = MuteControl::display(
-            MicState {
-                muted: true,
-                in_call: Some(false),
-            },
-            true,
-        );
-        assert_eq!(d.title, "OFF");
-        assert_eq!(d.state_index, 0);
-        assert_eq!(d.image, MUTE_OFF.as_str());
     }
 
     #[test]
     fn mute_display_off_when_call_state_unknown() {
-        // configured = true, but no in-call message received yet (in_call = None).
-        let d = MuteControl::display(
-            MicState {
-                muted: false,
-                in_call: None,
-            },
-            true,
-        );
+        let d = MuteControl::display(TeamsState::default(), true);
         assert_eq!(d.title, "OFF");
-        assert_eq!(d.state_index, 0);
         assert_eq!(d.image, MUTE_OFF.as_str());
     }
 
     #[test]
-    fn mute_display_mic_when_in_call_unmuted() {
-        let d = MuteControl::display(in_call(false), true);
-        assert_eq!(d.title, "MIC");
+    fn mute_display_mic_and_muted() {
+        assert_eq!(MuteControl::display(in_call(false), true).title, "MIC");
+        let muted = MuteControl::display(in_call(true), true);
+        assert_eq!(muted.title, "MUTED");
+        assert_eq!(muted.state_index, 1);
+        assert_eq!(muted.image, MUTE_MUTED.as_str());
+    }
+
+    // -- camera --
+
+    #[test]
+    fn camera_control_command_and_uuid() {
+        assert_eq!(
+            CameraControl::UUID,
+            "com.geoffdavis.teamsforlinux.toggle-camera"
+        );
+        assert_eq!(CameraControl::COMMAND, r#"{"action":"toggle-video"}"#);
+    }
+
+    #[test]
+    fn camera_display_setup_and_off() {
+        assert_eq!(
+            CameraControl::display(TeamsState::default(), false).title,
+            "SETUP"
+        );
+        // Configured but not in a call → OFF (disabled image).
+        let off = CameraControl::display(TeamsState::default(), true);
+        assert_eq!(off.title, "OFF");
+        assert_eq!(off.image, CAM_DISABLED.as_str());
+    }
+
+    #[test]
+    fn camera_display_on_when_camera_on_in_call() {
+        let mut s = in_call(false);
+        s.camera_on = Some(true);
+        let d = CameraControl::display(s, true);
+        assert_eq!(d.title, "CAM");
         assert_eq!(d.state_index, 0);
-        assert_eq!(d.image, MUTE_NORMAL.as_str());
+        assert_eq!(d.image, CAM_ON.as_str());
     }
 
     #[test]
-    fn mute_display_muted_when_in_call_muted() {
-        let d = MuteControl::display(in_call(true), true);
-        assert_eq!(d.title, "MUTED");
-        assert_eq!(d.state_index, 1);
-        assert_eq!(d.image, MUTE_MUTED.as_str());
+    fn camera_display_off_when_camera_off_or_unknown_in_call() {
+        for cam in [Some(false), None] {
+            let mut s = in_call(false);
+            s.camera_on = cam;
+            let d = CameraControl::display(s, true);
+            assert_eq!(d.title, "CAM OFF", "camera_on = {cam:?}");
+            assert_eq!(d.state_index, 1);
+            assert_eq!(d.image, CAM_OFF.as_str());
+        }
     }
 
-    #[test]
-    fn mute_display_images_are_data_uris_and_distinct() {
-        let normal = MuteControl::display(in_call(false), true).image;
-        let muted = MuteControl::display(in_call(true), true).image;
-        assert!(normal.starts_with("data:image/png;base64,"));
-        assert_ne!(normal, muted);
-    }
+    // -- shared activation guard --
 
     #[test]
-    fn mute_control_can_activate_only_in_call_and_configured() {
+    fn controls_activate_only_in_call_and_configured() {
         assert!(MuteControl::can_activate(in_call(false), true));
+        assert!(CameraControl::can_activate(in_call(false), true));
         assert!(!MuteControl::can_activate(in_call(false), false));
-        assert!(!MuteControl::can_activate(MicState::default(), true));
+        assert!(!CameraControl::can_activate(TeamsState::default(), true));
+    }
+
+    #[test]
+    fn action_images_are_distinct_data_uris() {
+        for uri in [
+            MUTE_NORMAL.as_str(),
+            CAM_ON.as_str(),
+            CAM_OFF.as_str(),
+            CAM_DISABLED.as_str(),
+        ] {
+            assert!(uri.starts_with("data:image/png;base64,"));
+        }
+        assert_ne!(CAM_ON.as_str(), CAM_OFF.as_str());
+        assert_ne!(CAM_ON.as_str(), MUTE_NORMAL.as_str());
     }
 }

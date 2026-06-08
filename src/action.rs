@@ -4,7 +4,7 @@
 //! action (mute today; camera/hand/blur later) shares one implementation. New
 //! controls are wired up in [`register_controls`].
 
-use crate::control::{Control, Display, MuteControl};
+use crate::control::{CameraControl, Control, Display, MuteControl};
 use crate::mqtt::{DisplayInput, MqttController};
 
 use openaction::{
@@ -26,7 +26,7 @@ pub fn spawn_display_pusher<C: Control>(mut display_rx: watch::Receiver<DisplayI
     tokio::spawn(async move {
         while display_rx.changed().await.is_ok() {
             let input = *display_rx.borrow_and_update();
-            let display = C::display(input.mic, input.configured);
+            let display = C::display(input.state, input.configured);
             for instance in visible_instances(C::UUID).await {
                 if let Err(err) = push_display(&instance, display).await {
                     log::warn!("display push failed: {err}");
@@ -45,7 +45,8 @@ pub fn spawn_display_pusher<C: Control>(mut display_rx: watch::Receiver<DisplayI
 pub async fn register_controls() {
     let controller = MqttController::new();
     register_control::<MuteControl>(&controller).await;
-    // Further controls (camera, hand, blur, …) register here against the same
+    register_control::<CameraControl>(&controller).await;
+    // Further controls (hand-raise, blur, …) register here against the same
     // `controller`, reusing its connection.
 }
 
@@ -73,7 +74,7 @@ impl<C: Control> ToggleControlAction<C> {
 
     async fn push_current(&self, instance: &Instance) -> OpenActionResult<()> {
         let input = self.controller.current_input();
-        push_display(instance, C::display(input.mic, input.configured)).await
+        push_display(instance, C::display(input.state, input.configured)).await
     }
 }
 
@@ -137,6 +138,7 @@ impl<C: Control> Action for ToggleControlAction<C> {
                     "topic_prefix": resolved.topic_prefix,
                     "microphone_topic": resolved.microphone_suffix,
                     "microphone_control_topic": resolved.microphone_control_suffix,
+                    "camera_topic": resolved.camera_suffix,
                     "in_call_topic": resolved.in_call_suffix,
                     "command_topic": resolved.command_suffix,
                 }))

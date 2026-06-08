@@ -1,22 +1,24 @@
-//! Pure mute/in-call state machine.
+//! Pure Teams media state machine (microphone, camera, call) driven by MQTT.
 
 /// Which subscribed MQTT topic a payload arrived on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StateTopic {
     Microphone,
     MicrophoneControl,
+    Camera,
     InCall,
 }
 
-/// Teams microphone/call state as derived from MQTT.
+/// Teams media/call state as derived from MQTT. Each control reads the fields
+/// it cares about; `None` options mean "no message seen yet".
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct MicState {
+pub struct TeamsState {
     pub muted: bool,
-    /// None = unknown (no in-call message seen yet).
+    pub camera_on: Option<bool>,
     pub in_call: Option<bool>,
 }
 
-impl MicState {
+impl TeamsState {
     pub fn in_active_call(&self) -> bool {
         self.in_call == Some(true)
     }
@@ -29,31 +31,35 @@ impl MicState {
             StateTopic::MicrophoneControl => match payload {
                 "muted" => self.muted = true,
                 "unmuted" => self.muted = false,
-                "off" => {
-                    self.in_call = Some(false);
-                    self.muted = false;
-                }
+                "off" => self.end_call(),
                 _ => {}
             },
             StateTopic::Microphone => match payload {
                 "true" | "muted" => self.muted = true,
                 "false" | "speaking" | "silent" => self.muted = false,
-                "off" => {
-                    self.in_call = Some(false);
-                    self.muted = false;
-                }
+                "off" => self.end_call(),
+                _ => {}
+            },
+            StateTopic::Camera => match payload {
+                "true" => self.camera_on = Some(true),
+                "false" => self.camera_on = Some(false),
                 _ => {}
             },
             StateTopic::InCall => match payload {
                 "true" => self.in_call = Some(true),
-                "false" => {
-                    self.in_call = Some(false);
-                    self.muted = false;
-                }
+                "false" => self.end_call(),
                 _ => {}
             },
         }
         *self != before
+    }
+
+    /// The call ended: reset transient media state. Camera goes back to
+    /// unknown since its retained value no longer reflects a live call.
+    fn end_call(&mut self) {
+        self.in_call = Some(false);
+        self.muted = false;
+        self.camera_on = None;
     }
 }
 
@@ -61,15 +67,19 @@ impl MicState {
 mod tests {
     use super::*;
 
-    fn state(muted: bool, in_call: Option<bool>) -> MicState {
-        MicState { muted, in_call }
+    fn state(muted: bool, in_call: Option<bool>) -> TeamsState {
+        TeamsState {
+            muted,
+            in_call,
+            camera_on: None,
+        }
     }
 
     // -- microphone/control topic --
 
     #[test]
     fn control_muted_sets_muted() {
-        let mut s = MicState::default();
+        let mut s = TeamsState::default();
         assert!(s.apply(StateTopic::MicrophoneControl, "muted"));
         assert_eq!(s, state(true, None));
     }
@@ -129,11 +139,38 @@ mod tests {
         assert_eq!(s, state(false, Some(true)));
     }
 
+    // -- camera topic --
+
+    #[test]
+    fn camera_true_false_set_state() {
+        let mut s = state(false, Some(true));
+        assert!(s.apply(StateTopic::Camera, "true"));
+        assert_eq!(s.camera_on, Some(true));
+        assert!(s.apply(StateTopic::Camera, "false"));
+        assert_eq!(s.camera_on, Some(false));
+    }
+
+    #[test]
+    fn camera_unknown_payload_ignored() {
+        let mut s = state(false, Some(true));
+        assert!(!s.apply(StateTopic::Camera, "maybe"));
+        assert_eq!(s.camera_on, None);
+    }
+
+    #[test]
+    fn ending_call_clears_camera() {
+        let mut s = state(false, Some(true));
+        assert!(s.apply(StateTopic::Camera, "true"));
+        assert!(s.apply(StateTopic::InCall, "false"));
+        assert_eq!(s.camera_on, None);
+        assert_eq!(s.in_call, Some(false));
+    }
+
     // -- in-call topic --
 
     #[test]
     fn in_call_true_sets_active() {
-        let mut s = MicState::default();
+        let mut s = TeamsState::default();
         assert!(s.apply(StateTopic::InCall, "true"));
         assert_eq!(s, state(false, Some(true)));
     }

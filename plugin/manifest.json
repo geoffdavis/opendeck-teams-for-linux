@@ -23,6 +23,19 @@
 				{ "Image": "icons/icon", "Title": "MIC", "FontSize": 18, "TitleColor": "#FFFFFF" },
 				{ "Image": "icons/icon-muted", "Title": "MUTED", "FontSize": 18, "TitleColor": "#FF4040" }
 			]
+		},
+		{
+			"UUID": "com.geoffdavis.teamsforlinux.toggle-camera",
+			"Name": "Toggle Camera (Teams)",
+			"Icon": "icons/cam",
+			"Tooltip": "Toggle Microsoft Teams camera via MQTT (teams-for-linux)",
+			"Controllers": ["Keypad"],
+			"DisableAutomaticStates": true,
+			"PropertyInspectorPath": "pi/index.html",
+			"States": [
+				{ "Image": "icons/cam", "Title": "CAM", "FontSize": 18, "TitleColor": "#FFFFFF" },
+				{ "Image": "icons/cam-off", "Title": "CAM OFF", "FontSize": 14, "TitleColor": "#FF4040" }
+			]
 		}
 	]
 }

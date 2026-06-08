@@ -15,6 +15,7 @@ pub struct PiSettings {
     pub topic_prefix: String,
     pub microphone_topic: String,
     pub microphone_control_topic: String,
+    pub camera_topic: String,
     pub in_call_topic: String,
     pub command_topic: String,
 }
@@ -30,6 +31,7 @@ impl PiSettings {
             &self.topic_prefix,
             &self.microphone_topic,
             &self.microphone_control_topic,
+            &self.camera_topic,
             &self.in_call_topic,
             &self.command_topic,
         ]
@@ -51,6 +53,7 @@ pub struct FileSettings {
     pub topic_prefix: Option<String>,
     pub microphone_topic: Option<String>,
     pub microphone_control_topic: Option<String>,
+    pub camera_topic: Option<String>,
     pub in_call_topic: Option<String>,
     pub command_topic: Option<String>,
 }
@@ -65,6 +68,7 @@ pub struct Resolved {
     pub topic_prefix: String,
     pub microphone_suffix: String,
     pub microphone_control_suffix: String,
+    pub camera_suffix: String,
     pub in_call_suffix: String,
     pub command_suffix: String,
     pub configured: bool,
@@ -76,6 +80,9 @@ impl Resolved {
     }
     pub fn microphone_control_topic(&self) -> String {
         join_topic(&self.topic_prefix, &self.microphone_control_suffix)
+    }
+    pub fn camera_topic(&self) -> String {
+        join_topic(&self.topic_prefix, &self.camera_suffix)
     }
     pub fn in_call_topic(&self) -> String {
         join_topic(&self.topic_prefix, &self.in_call_suffix)
@@ -155,6 +162,7 @@ pub fn resolve(file: Option<&FileSettings>, pi: &PiSettings) -> Resolved {
             &f.microphone_control_topic,
             "microphone/control",
         ),
+        camera_suffix: pick(&pi.camera_topic, &f.camera_topic, "camera"),
         in_call_suffix: pick(&pi.in_call_topic, &f.in_call_topic, "in-call"),
         command_suffix: pick(&pi.command_topic, &f.command_topic, "command"),
         configured: file.is_some() || pi.any_set(),
@@ -204,6 +212,7 @@ mod tests {
         assert_eq!(r.password, "");
         assert_eq!(r.microphone_topic(), "teams/microphone");
         assert_eq!(r.microphone_control_topic(), "teams/microphone/control");
+        assert_eq!(r.camera_topic(), "teams/camera");
         assert_eq!(r.in_call_topic(), "teams/in-call");
         assert_eq!(r.command_topic(), "teams/command");
     }
