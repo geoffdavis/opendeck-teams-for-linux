@@ -32,11 +32,23 @@ jobs:
           # Claude Pro/Max subscription auth. Generate with `claude setup-token`
           # and store as the CLAUDE_CODE_OAUTH_TOKEN repo secret.
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          plugin_marketplaces: "https://github.com/anthropics/claude-code.git"
-          plugins: "code-review@claude-code-plugins"
-          prompt: "/code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }}"
-          # Grant the tools the review needs to actually post its findings;
-          # without these the inline-comment calls are denied and nothing is
-          # posted.
+          # Explicit review prompt (the action's documented pattern). It posts
+          # via the action's native tools, which the plugin-skill approach did
+          # not, so findings actually land on the PR.
+          prompt: |
+            Review pull request #${{ github.event.pull_request.number }} in the
+            repository ${{ github.repository }}. The PR branch is already
+            checked out in the working directory.
+
+            Focus on correctness bugs, security issues, and regressions
+            introduced by the diff; mention notable quality problems briefly and
+            skip minor nits unless they matter. Be concise.
+
+            Post your findings on GitHub only — do not return the review as a
+            chat message:
+            - Use `mcp__github_inline_comment__create_inline_comment` (with
+              `confirmed: true`) for line-specific findings.
+            - Use `gh pr comment` to post one short summary comment.
+            If you find nothing worth flagging, post a brief summary saying so.
           claude_args: |
             --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
