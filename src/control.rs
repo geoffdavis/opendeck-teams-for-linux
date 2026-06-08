@@ -143,6 +143,21 @@ mod tests {
     }
 
     #[test]
+    fn mute_display_off_when_call_state_unknown() {
+        // configured = true, but no in-call message received yet (in_call = None).
+        let d = MuteControl::display(
+            MicState {
+                muted: false,
+                in_call: None,
+            },
+            true,
+        );
+        assert_eq!(d.title, "OFF");
+        assert_eq!(d.state_index, 0);
+        assert_eq!(d.image, MUTE_OFF.as_str());
+    }
+
+    #[test]
     fn mute_display_mic_when_in_call_unmuted() {
         let d = MuteControl::display(in_call(false), true);
         assert_eq!(d.title, "MIC");
