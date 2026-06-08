@@ -157,6 +157,9 @@ pub fn resolve(file: Option<&FileSettings>, pi: &PiSettings) -> Resolved {
         password: pick(&pi.password, &f.password, ""),
         topic_prefix: pick(&pi.topic_prefix, &f.topic_prefix, "teams"),
         microphone_suffix: pick(&pi.microphone_topic, &f.microphone_topic, "microphone"),
+        // `microphone/control` (muted/unmuted/off) requires upstream teams-for-linux
+        // PR #2608; stock builds publish only `microphone`, from which mute state is
+        // still derived. Not dead config — keep until that PR is merged upstream.
         microphone_control_suffix: pick(
             &pi.microphone_control_topic,
             &f.microphone_control_topic,

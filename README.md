@@ -48,6 +48,13 @@ The default topics (`microphone`, `microphone/control`, `in-call`, `command`
 under the `teams` prefix) match this plugin's defaults — if you customize
 `mqtt.mediaTopics`, mirror the values in the plugin settings.
 
+> **Note:** the `microphone/control` topic (`muted`/`unmuted`/`off`) is not in
+> stock teams-for-linux yet — it's added by upstream PR
+> [IsmaelMartinez/teams-for-linux#2608](https://github.com/IsmaelMartinez/teams-for-linux/pull/2608).
+> Until that merges, run a build that includes it; otherwise the plugin derives
+> mute state from the standard `microphone` topic
+> (`speaking`/`silent`/`muted`/`off`), which works without the PR.
+
 ## Configure the plugin
 
 Open the button's property inspector in OpenDeck and fill in the broker
@@ -114,11 +121,13 @@ scripts/generate-icons.sh    # regenerate committed icons
 ```
 
 How it works: a background task subscribes to the state topics and folds
-payloads into a `{muted, in_call}` state machine; a watch channel fans changes
-out to every visible button instance. Key presses publish
-`{"action":"toggle-mute"}` to the command topic, guarded by in-call state.
-teams-for-linux's `microphone/control` topic (muted/unmuted/off) is the
-authoritative mute signal.
+payloads into a `TeamsState { muted, camera_on, in_call }` state machine; a watch
+channel fans changes out to every visible button instance. Each action publishes
+its command (e.g. `{"action":"toggle-mute"}` or `{"action":"toggle-video"}`) to
+the command topic, guarded by in-call state. With upstream PR #2608,
+teams-for-linux's `microphone/control` topic (`muted`/`unmuted`/`off`) is the
+authoritative mute signal; without it the plugin derives mute state from the
+standard `microphone` topic (`speaking`/`silent`/`muted`/`off`).
 
 ## License
 
