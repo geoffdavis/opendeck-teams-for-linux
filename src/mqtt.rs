@@ -1,7 +1,7 @@
 //! MQTT connection management: subscribe to state topics, publish commands.
 
 use crate::settings::{self, PiSettings, Resolved};
-use crate::state::{MicState, StateTopic};
+use crate::state::{StateTopic, TeamsState};
 
 use rumqttc::{AsyncClient, Event, MqttOptions, Packet, QoS};
 use std::sync::Arc;
@@ -12,7 +12,7 @@ use tokio::task::JoinHandle;
 /// Everything the display pusher needs to render the button.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct DisplayInput {
-    pub mic: MicState,
+    pub state: TeamsState,
     pub configured: bool,
 }
 
@@ -75,7 +75,7 @@ impl MqttController {
 
         // Reset state and propagate the configured flag; notifies the pusher.
         self.display_tx.send_modify(|d| {
-            d.mic = MicState::default();
+            d.state = TeamsState::default();
             d.configured = resolved.configured;
         });
 
@@ -93,12 +93,12 @@ impl MqttController {
     pub async fn key_pressed(
         &self,
         command: &str,
-        can_activate: fn(MicState, bool) -> bool,
+        can_activate: fn(TeamsState, bool) -> bool,
     ) -> bool {
         let (command_topic, client) = {
             let inner = self.inner.lock().await;
             let input = *self.display_tx.borrow();
-            if !can_activate(input.mic, input.configured) {
+            if !can_activate(input.state, input.configured) {
                 log::info!("ignoring key press: control not active for the current Teams state");
                 return false;
             }
@@ -146,6 +146,7 @@ fn spawn_mqtt(
             resolved.microphone_control_topic(),
             StateTopic::MicrophoneControl,
         ),
+        (resolved.camera_topic(), StateTopic::Camera),
         (resolved.in_call_topic(), StateTopic::InCall),
     ];
 
@@ -172,7 +173,7 @@ fn spawn_mqtt(
                     if let Some((_, topic)) =
                         subscriptions.iter().find(|(t, _)| *t == publish.topic)
                     {
-                        display_tx.send_if_modified(|d| d.mic.apply(*topic, &payload));
+                        display_tx.send_if_modified(|d| d.state.apply(*topic, &payload));
                     }
                 }
                 Ok(_) => {}
@@ -202,7 +203,7 @@ mod tests {
         // A state change on the shared connection reaches both subscribers.
         controller.display_tx.send_modify(|d| {
             d.configured = true;
-            d.mic.in_call = Some(true);
+            d.state.in_call = Some(true);
         });
 
         assert!(a.has_changed().unwrap());
@@ -212,7 +213,7 @@ mod tests {
         let b = *b.borrow_and_update();
         assert_eq!(a, b);
         assert!(a.configured);
-        assert_eq!(a.mic.in_call, Some(true));
+        assert_eq!(a.state.in_call, Some(true));
         // current_input() reflects the same shared state.
         assert_eq!(controller.current_input(), a);
     }
