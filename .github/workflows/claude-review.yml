@@ -24,6 +24,9 @@ jobs:
     # CLAUDE_CODE_OAUTH_TOKEN secret.
     if: github.event.pull_request.head.repo.full_name == github.repository
     steps:
+      # The action fetches `main` to restore trusted config, so it needs the
+      # repo checked out (a .git directory).
+      - uses: actions/checkout@v4
       - uses: anthropics/claude-code-action@v1
         with:
           # Claude Pro/Max subscription auth. Generate with `claude setup-token`
