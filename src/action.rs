@@ -4,9 +4,8 @@
 //! action (mute today; camera/hand/blur later) shares one implementation. New
 //! controls are wired up in [`register_controls`].
 
-use crate::control::{Control, MuteControl};
+use crate::control::{Control, Display, MuteControl};
 use crate::mqtt::{DisplayInput, MqttController};
-use crate::state::Display;
 
 use openaction::{
     Action, Instance, OpenActionResult, async_trait, register_action, visible_instances,
@@ -15,16 +14,11 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 use tokio::sync::watch;
 
-/// Push one control's display (state index, title, image) to a single key.
-pub async fn push_display<C: Control>(
-    instance: &Instance,
-    display: Display,
-) -> OpenActionResult<()> {
+/// Push a control's display (state index, title, image) to a single key.
+pub async fn push_display(instance: &Instance, display: Display) -> OpenActionResult<()> {
     instance.set_state(display.state_index).await?;
     instance.set_title(Some(display.title), None).await?;
-    instance
-        .set_image(Some(C::icon_data_uri(display.icon)), None)
-        .await
+    instance.set_image(Some(display.image), None).await
 }
 
 /// Watch for state changes and refresh every visible instance of control `C`.
@@ -34,7 +28,7 @@ pub fn spawn_display_pusher<C: Control>(mut display_rx: watch::Receiver<DisplayI
             let input = *display_rx.borrow_and_update();
             let display = C::display(input.mic, input.configured);
             for instance in visible_instances(C::UUID).await {
-                if let Err(err) = push_display::<C>(&instance, display).await {
+                if let Err(err) = push_display(&instance, display).await {
                     log::warn!("display push failed: {err}");
                 }
             }
@@ -79,7 +73,7 @@ impl<C: Control> ToggleControlAction<C> {
 
     async fn push_current(&self, instance: &Instance) -> OpenActionResult<()> {
         let input = self.controller.current_input();
-        push_display::<C>(instance, C::display(input.mic, input.configured)).await
+        push_display(instance, C::display(input.mic, input.configured)).await
     }
 }
 
