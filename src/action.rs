@@ -44,13 +44,22 @@ pub fn spawn_display_pusher<C: Control>(mut display_rx: watch::Receiver<DisplayI
 
 /// Register every control with OpenAction. This is the single place a new
 /// toggle control is added to the plugin.
+///
+/// All controls share one [`MqttController`] — a single broker connection and
+/// Teams-state stream — rather than opening a connection each. Add a control
+/// by registering it here; it gets its own display feed off the shared stream.
 pub async fn register_controls() {
-    // Each control currently shares the mic/in-call state from its own
-    // connection; a shared MQTT connection across controls is tracked
-    // separately. For now there is one control.
-    let (controller, display_rx) = MqttController::new();
-    spawn_display_pusher::<MuteControl>(display_rx);
-    register_action(ToggleControlAction::<MuteControl>::new(controller)).await;
+    let controller = MqttController::new();
+    register_control::<MuteControl>(&controller).await;
+    // Further controls (camera, hand, blur, …) register here against the same
+    // `controller`, reusing its connection.
+}
+
+/// Wire one control to the shared controller: its own display feed plus an
+/// action instance that publishes over the shared connection.
+async fn register_control<C: Control>(controller: &Arc<MqttController>) {
+    spawn_display_pusher::<C>(controller.subscribe());
+    register_action(ToggleControlAction::<C>::new(Arc::clone(controller))).await;
 }
 
 /// Generic OpenDeck action for a [`Control`]: publishes the control's command

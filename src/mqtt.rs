@@ -29,13 +29,23 @@ pub struct MqttController {
 }
 
 impl MqttController {
-    pub fn new() -> (Arc<Self>, watch::Receiver<DisplayInput>) {
-        let (display_tx, display_rx) = watch::channel(DisplayInput::default());
-        let controller = Arc::new(Self {
+    /// Create the shared connection manager. One instance owns a single broker
+    /// connection and the Teams-state stream; every control registers against
+    /// it (see [`subscribe`](Self::subscribe)) rather than opening its own
+    /// connection.
+    pub fn new() -> Arc<Self> {
+        let (display_tx, _) = watch::channel(DisplayInput::default());
+        Arc::new(Self {
             display_tx,
             inner: Mutex::new(Inner::default()),
-        });
-        (controller, display_rx)
+        })
+    }
+
+    /// A fresh receiver on the shared Teams-state stream — one per registered
+    /// control, so each control's display pusher is driven by the same
+    /// connection.
+    pub fn subscribe(&self) -> watch::Receiver<DisplayInput> {
+        self.display_tx.subscribe()
     }
 
     /// Latest Teams state + configured flag, for a control to render from.
@@ -175,4 +185,45 @@ fn spawn_mqtt(
     });
 
     (client, task)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // The shared manager fans one Teams-state stream out to every registered
+    // control, so adding controls does not open additional connections.
+    #[test]
+    fn subscribe_fans_shared_state_out_to_every_control() {
+        let controller = MqttController::new();
+        let mut a = controller.subscribe();
+        let mut b = controller.subscribe();
+
+        // A state change on the shared connection reaches both subscribers.
+        controller.display_tx.send_modify(|d| {
+            d.configured = true;
+            d.mic.in_call = Some(true);
+        });
+
+        assert!(a.has_changed().unwrap());
+        assert!(b.has_changed().unwrap());
+
+        let a = *a.borrow_and_update();
+        let b = *b.borrow_and_update();
+        assert_eq!(a, b);
+        assert!(a.configured);
+        assert_eq!(a.mic.in_call, Some(true));
+        // current_input() reflects the same shared state.
+        assert_eq!(controller.current_input(), a);
+    }
+
+    #[test]
+    fn subscribers_start_from_the_current_shared_state() {
+        let controller = MqttController::new();
+        controller.display_tx.send_modify(|d| d.configured = true);
+
+        // A control that registers later still sees the current state.
+        let rx = controller.subscribe();
+        assert!(rx.borrow().configured);
+    }
 }
