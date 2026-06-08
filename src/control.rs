@@ -153,6 +153,52 @@ impl Control for CameraControl {
     }
 }
 
+/// Raise/lower hand (Teams "toggle-hand-raise").
+///
+/// A one-way toggle: teams-for-linux accepts the command but publishes no
+/// hand-raise status, so — unlike mute/camera — the key cannot reflect whether
+/// the hand is currently raised. It only shows call/configured state (active in
+/// a call, disabled otherwise) and fires the toggle on press.
+pub struct HandControl;
+
+static HAND_ON: LazyLock<String> =
+    LazyLock::new(|| png_data_uri(include_bytes!("../plugin/icons/hand@2x.png")));
+static HAND_DISABLED: LazyLock<String> =
+    LazyLock::new(|| png_data_uri(include_bytes!("../plugin/icons/hand-disabled@2x.png")));
+
+impl Control for HandControl {
+    const UUID: &'static str = "com.geoffdavis.teamsforlinux.toggle-hand-raise";
+    const COMMAND: &'static str = r#"{"action":"toggle-hand-raise"}"#;
+
+    fn display(state: TeamsState, configured: bool) -> Display {
+        // No raised/lowered state to mirror, so there is a single active look;
+        // index 0 always (the manifest action has one state).
+        if !configured {
+            Display {
+                state_index: 0,
+                title: "SETUP",
+                image: HAND_DISABLED.as_str(),
+            }
+        } else if !state.in_active_call() {
+            Display {
+                state_index: 0,
+                title: "OFF",
+                image: HAND_DISABLED.as_str(),
+            }
+        } else {
+            Display {
+                state_index: 0,
+                title: "HAND",
+                image: HAND_ON.as_str(),
+            }
+        }
+    }
+
+    fn can_activate(state: TeamsState, configured: bool) -> bool {
+        ready(state, configured)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -252,14 +298,48 @@ mod tests {
         }
     }
 
+    // -- hand-raise --
+
+    #[test]
+    fn hand_control_command_and_uuid() {
+        assert_eq!(
+            HandControl::UUID,
+            "com.geoffdavis.teamsforlinux.toggle-hand-raise"
+        );
+        assert_eq!(HandControl::COMMAND, r#"{"action":"toggle-hand-raise"}"#);
+    }
+
+    #[test]
+    fn hand_display_setup_off_and_active() {
+        // Unconfigured and configured-but-not-in-call both show the disabled
+        // image; only an active call shows the lit hand.
+        let setup = HandControl::display(TeamsState::default(), false);
+        assert_eq!(setup.title, "SETUP");
+        assert_eq!(setup.image, HAND_DISABLED.as_str());
+        let off = HandControl::display(TeamsState::default(), true);
+        assert_eq!(off.title, "OFF");
+        assert_eq!(off.image, HAND_DISABLED.as_str());
+
+        let on = HandControl::display(in_call(false), true);
+        assert_eq!(on.title, "HAND");
+        assert_eq!(on.state_index, 0);
+        assert_eq!(on.image, HAND_ON.as_str());
+    }
+
     // -- shared activation guard --
 
     #[test]
     fn controls_activate_only_in_call_and_configured() {
-        assert!(MuteControl::can_activate(in_call(false), true));
-        assert!(CameraControl::can_activate(in_call(false), true));
+        for active in [
+            MuteControl::can_activate(in_call(false), true),
+            CameraControl::can_activate(in_call(false), true),
+            HandControl::can_activate(in_call(false), true),
+        ] {
+            assert!(active);
+        }
         assert!(!MuteControl::can_activate(in_call(false), false));
         assert!(!CameraControl::can_activate(TeamsState::default(), true));
+        assert!(!HandControl::can_activate(TeamsState::default(), true));
     }
 
     #[test]
@@ -269,10 +349,14 @@ mod tests {
             CAM_ON.as_str(),
             CAM_OFF.as_str(),
             CAM_DISABLED.as_str(),
+            HAND_ON.as_str(),
+            HAND_DISABLED.as_str(),
         ] {
             assert!(uri.starts_with("data:image/png;base64,"));
         }
         assert_ne!(CAM_ON.as_str(), CAM_OFF.as_str());
         assert_ne!(CAM_ON.as_str(), MUTE_NORMAL.as_str());
+        assert_ne!(HAND_ON.as_str(), HAND_DISABLED.as_str());
+        assert_ne!(HAND_ON.as_str(), CAM_ON.as_str());
     }
 }

@@ -36,6 +36,18 @@
 				{ "Image": "icons/cam", "Title": "CAM", "FontSize": 18, "TitleColor": "#FFFFFF" },
 				{ "Image": "icons/cam-off", "Title": "CAM OFF", "FontSize": 14, "TitleColor": "#FF4040" }
 			]
+		},
+		{
+			"UUID": "com.geoffdavis.teamsforlinux.toggle-hand-raise",
+			"Name": "Toggle Hand Raise (Teams)",
+			"Icon": "icons/hand",
+			"Tooltip": "Raise or lower your hand in Microsoft Teams via MQTT (teams-for-linux). One-way toggle: Teams reports no hand-raise state to display.",
+			"Controllers": ["Keypad"],
+			"DisableAutomaticStates": true,
+			"PropertyInspectorPath": "pi/index.html",
+			"States": [
+				{ "Image": "icons/hand", "Title": "HAND", "FontSize": 18, "TitleColor": "#FFFFFF" }
+			]
 		}
 	]
 }
