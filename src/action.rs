@@ -107,7 +107,8 @@ impl<C: Control> Action for ToggleControlAction<C> {
             .key_pressed(C::COMMAND, C::can_activate)
             .await
         {
-            // Not in a call / unconfigured / publish failure: flash the warning triangle.
+            // The press was rejected by the control's guard or the publish
+            // failed: flash the warning triangle.
             instance.show_alert().await?;
         }
         Ok(())
