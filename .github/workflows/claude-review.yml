@@ -12,6 +12,10 @@ concurrency:
 permissions:
   contents: read
   pull-requests: write
+  # Required: the action mints its GitHub token via OIDC.
+  id-token: write
+  # Lets the review read workflow run / CI results for context.
+  actions: read
 
 jobs:
   review:
