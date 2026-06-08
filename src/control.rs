@@ -183,10 +183,19 @@ mod tests {
     }
 
     #[test]
-    fn mute_display_off_when_call_state_unknown() {
-        let d = MuteControl::display(TeamsState::default(), true);
-        assert_eq!(d.title, "OFF");
-        assert_eq!(d.image, MUTE_OFF.as_str());
+    fn mute_display_off_when_not_in_call() {
+        // Unknown call state (None) and an ended call (Some(false)) both show OFF.
+        for in_call in [None, Some(false)] {
+            let d = MuteControl::display(
+                TeamsState {
+                    in_call,
+                    ..Default::default()
+                },
+                true,
+            );
+            assert_eq!(d.title, "OFF", "in_call = {in_call:?}");
+            assert_eq!(d.image, MUTE_OFF.as_str());
+        }
     }
 
     #[test]
