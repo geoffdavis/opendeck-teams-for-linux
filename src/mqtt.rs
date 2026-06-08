@@ -1,7 +1,7 @@
 //! MQTT connection management: subscribe to state topics, publish commands.
 
 use crate::settings::{self, PiSettings, Resolved};
-use crate::state::{self, MicState, StateTopic};
+use crate::state::{MicState, StateTopic};
 
 use rumqttc::{AsyncClient, Event, MqttOptions, Packet, QoS};
 use std::sync::Arc;
@@ -38,10 +38,9 @@ impl MqttController {
         (controller, display_rx)
     }
 
-    /// Current display, computed from the latest state.
-    pub fn current_display(&self) -> state::Display {
-        let input = *self.display_tx.borrow();
-        state::display(input.mic, input.configured)
+    /// Latest Teams state + configured flag, for a control to render from.
+    pub fn current_input(&self) -> DisplayInput {
+        *self.display_tx.borrow()
     }
 
     /// Currently resolved settings (for PI placeholder reporting).
@@ -78,13 +77,19 @@ impl MqttController {
         inner.resolved = Some(resolved);
     }
 
-    /// Handle a key press. Returns true if toggle-mute was published.
-    pub async fn key_pressed(&self) -> bool {
+    /// Handle a key press for a control. Publishes `command` to the command
+    /// topic when `can_activate` allows it for the current state. Returns true
+    /// if the command was published.
+    pub async fn key_pressed(
+        &self,
+        command: &str,
+        can_activate: fn(MicState, bool) -> bool,
+    ) -> bool {
         let (command_topic, client) = {
             let inner = self.inner.lock().await;
             let input = *self.display_tx.borrow();
-            if !state::can_toggle(input.mic, input.configured) {
-                log::info!("ignoring key press: not in a call (or unconfigured)");
+            if !can_activate(input.mic, input.configured) {
+                log::info!("ignoring key press: control not active for the current Teams state");
                 return false;
             }
             let (Some(resolved), Some(client)) = (&inner.resolved, &inner.client) else {
@@ -93,16 +98,11 @@ impl MqttController {
             (resolved.command_topic(), client.clone())
         }; // inner guard dropped here — publish must not hold the lock
         match client
-            .publish(
-                command_topic,
-                QoS::AtLeastOnce,
-                false,
-                r#"{"action":"toggle-mute"}"#,
-            )
+            .publish(command_topic, QoS::AtLeastOnce, false, command.as_bytes())
             .await
         {
             Ok(()) => {
-                log::info!("published toggle-mute");
+                log::info!("published command: {command}");
                 true
             }
             Err(err) => {

@@ -7,8 +7,13 @@
     self,
     nixpkgs,
   }: let
+    # Platforms the plugin is built and released for (the plugin targets Linux).
     systems = ["x86_64-linux" "aarch64-linux"];
+    # Platforms that get a dev shell. macOS is dev-only: you can build, test,
+    # lint and regenerate icons there, but the shipped plugin targets Linux.
+    devSystems = systems ++ ["aarch64-darwin"];
     eachSystem = f: nixpkgs.lib.genAttrs systems (system: f nixpkgs.legacyPackages.${system});
+    eachDevSystem = f: nixpkgs.lib.genAttrs devSystems (system: f nixpkgs.legacyPackages.${system});
     pluginId = "com.geoffdavis.teamsforlinux.sdPlugin";
   in {
     packages = eachSystem (pkgs: {
@@ -42,22 +47,27 @@
 
     homeManagerModules.default = import ./nix/hm-module.nix self;
 
-    devShells = eachSystem (pkgs: {
+    devShells = eachDevSystem (pkgs: {
       default = pkgs.mkShell {
-        packages = with pkgs; [
-          cargo
-          rustc
-          clippy
-          rustfmt
-          rust-analyzer
-          (python3.withPackages (ps: [ps.pillow]))
-          zip
-          jq
-          mosquitto
-        ];
+        packages = with pkgs;
+          [
+            cargo
+            rustc
+            clippy
+            rustfmt
+            rust-analyzer
+            (python3.withPackages (ps: [ps.pillow]))
+            zip
+            jq
+            mosquitto
+          ]
+          ++ lib.optionals stdenv.isDarwin [
+            # Common transitive link dependency for Rust toolchains on macOS.
+            libiconv
+          ];
       };
     });
 
-    formatter = eachSystem (pkgs: pkgs.alejandra);
+    formatter = eachDevSystem (pkgs: pkgs.alejandra);
   };
 }
