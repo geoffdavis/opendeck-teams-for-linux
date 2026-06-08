@@ -313,10 +313,9 @@ mod tests {
     fn hand_display_setup_off_and_active() {
         // Unconfigured and configured-but-not-in-call both show the disabled
         // image; only an active call shows the lit hand.
-        assert_eq!(
-            HandControl::display(TeamsState::default(), false).title,
-            "SETUP"
-        );
+        let setup = HandControl::display(TeamsState::default(), false);
+        assert_eq!(setup.title, "SETUP");
+        assert_eq!(setup.image, HAND_DISABLED.as_str());
         let off = HandControl::display(TeamsState::default(), true);
         assert_eq!(off.title, "OFF");
         assert_eq!(off.image, HAND_DISABLED.as_str());
