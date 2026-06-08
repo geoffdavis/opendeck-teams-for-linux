@@ -1,10 +1,10 @@
 //! OpenAction integration: a generic toggle-control action and display pushing.
 //!
 //! [`ToggleControlAction`] is parameterised by a [`Control`], so every Teams
-//! action (mute today; camera/hand/blur later) shares one implementation. New
-//! controls are wired up in [`register_controls`].
+//! action (mute, camera, hand-raise) shares one implementation. New controls are
+//! wired up in [`register_controls`].
 
-use crate::control::{CameraControl, Control, Display, MuteControl};
+use crate::control::{CameraControl, Control, Display, HandControl, MuteControl};
 use crate::mqtt::{DisplayInput, MqttController};
 
 use openaction::{
@@ -46,8 +46,9 @@ pub async fn register_controls() {
     let controller = MqttController::new();
     register_control::<MuteControl>(&controller).await;
     register_control::<CameraControl>(&controller).await;
-    // Further controls (hand-raise, blur, …) register here against the same
-    // `controller`, reusing its connection.
+    register_control::<HandControl>(&controller).await;
+    // Further controls register here against the same `controller`, reusing its
+    // connection.
 }
 
 /// Wire one control to the shared controller: its own display feed plus an

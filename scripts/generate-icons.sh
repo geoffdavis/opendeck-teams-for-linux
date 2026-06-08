@@ -9,6 +9,10 @@
 #                        Teams "T"): normal, muted (red slash) and off (greyed).
 #   * cam*.png         - the camera action's button states (a camcorder with a
 #                        Teams "T"): on, off (red slash) and disabled (greyed).
+#   * hand*.png        - the hand-raise action's button states (a raised hand
+#                        with a Teams "T"): active and disabled (greyed). There
+#                        is no raised/lowered distinction because teams-for-linux
+#                        publishes no hand-raise status to mirror.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -55,6 +59,21 @@ def draw_cam(d, s, color, tcolor):
     teams_t(d, s, s * 0.40, s * 0.52, tcolor)
 
 
+def draw_hand(d, s, color, tcolor):
+    """A raised hand (palm + four fingers + thumb) with a Teams "T" on the palm."""
+    fw, gap, x0 = s * 0.055, s * 0.072, s * 0.375
+    for i in range(4):                                            # four fingers
+        x = x0 + i * gap
+        d.rounded_rectangle([x, s * 0.26, x + fw, s * 0.50], radius=fw * 0.5, fill=color)
+    d.rounded_rectangle([s * 0.30, s * 0.50, s * 0.40, s * 0.66],
+                        radius=s * 0.03, fill=color)             # thumb
+    d.rounded_rectangle([s * 0.36, s * 0.45, s * 0.66, s * 0.72],
+                        radius=s * 0.06, fill=color)             # palm
+    d.rounded_rectangle([s * 0.41, s * 0.68, s * 0.61, s * 0.80],
+                        radius=s * 0.03, fill=color)             # wrist
+    teams_t(d, s, s * 0.51, s * 0.585, tcolor)
+
+
 def action_icon(size, bg, fg, tcolor, glyph, slash=False):
     s = size * SS
     img = Image.new("RGBA", (s, s), bg)   # full-bleed background
@@ -81,6 +100,10 @@ for size, sfx in ((72, ""), (144, "@2x")):
     save(action_icon(size, TFL, WHITE, TFL, draw_cam), f"cam{sfx}.png")
     save(action_icon(size, TFL, WHITE, TFL, draw_cam, slash=True), f"cam-off{sfx}.png")
     save(action_icon(size, OFF, GREY, OFF, draw_cam), f"cam-disabled{sfx}.png")
+    # Hand-raise: active / disabled (greyed). No raised/lowered state because
+    # teams-for-linux publishes no hand-raise status to mirror.
+    save(action_icon(size, TFL, WHITE, TFL, draw_hand), f"hand{sfx}.png")
+    save(action_icon(size, OFF, GREY, OFF, draw_hand), f"hand-disabled{sfx}.png")
 
 # Plugin identity icon, based on the teams-for-linux application icon.
 tfl = Image.open(SOURCE).convert("RGBA")
