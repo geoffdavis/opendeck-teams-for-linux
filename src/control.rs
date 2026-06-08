@@ -3,15 +3,15 @@
 //! Each OpenDeck action this plugin exposes — mute today; camera, hand-raise
 //! and blur planned — is structurally the same *toggle control*: pressing the
 //! key publishes a fixed JSON command to teams-for-linux over MQTT, and the
-//! key reflects a piece of live Teams state. The parts that differ per control
-//! live behind the [`Control`] trait, so adding a control is a small `impl`
-//! plus a registry entry in `action::register_controls`.
+//! key reflects a piece of live Teams state. Each control owns its full
+//! state → display mapping (titles + images), so the generic runtime
+//! ([`MqttController`], the display pusher) never branches on a specific
+//! control. Adding a control is a small `impl` plus a registry entry in
+//! `action::register_controls`.
 //!
-//! Generalising the *state* itself (a per-control state type rather than the
-//! shared [`MicState`]) is tracked separately and intentionally out of scope
-//! here — every control currently reads the same mic/in-call state machine.
+//! [`MqttController`]: crate::mqtt::MqttController
 
-use crate::state::{self, Display, Icon, MicState};
+use crate::state::MicState;
 
 use base64::Engine as _;
 use std::sync::LazyLock;
@@ -23,28 +23,33 @@ fn png_data_uri(bytes: &[u8]) -> String {
     )
 }
 
+/// What a control's key should show: which manifest state to select, its title,
+/// and the key image as a `data:` URI. Produced per-control by
+/// [`Control::display`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Display {
+    pub state_index: u16,
+    pub title: &'static str,
+    pub image: &'static str,
+}
+
 /// A Teams toggle control bound to exactly one OpenDeck action UUID.
 ///
 /// Implementors are zero-sized marker types; everything they contribute is
-/// constants and pure functions, which keeps the runtime ([`MqttController`],
-/// the display pusher) free of per-control branching.
-///
-/// [`MqttController`]: crate::mqtt::MqttController
+/// constants and pure functions, which keeps the runtime free of per-control
+/// branching.
 pub trait Control: Send + Sync + 'static {
     /// Manifest action UUID (`Actions[].UUID` in `plugin/manifest.json`).
     const UUID: &'static str;
     /// JSON payload published to the command topic on a key press.
     const COMMAND: &'static str;
 
-    /// Map the current Teams state to what the key should show.
+    /// Map the current Teams state to what the key should show, including the
+    /// resolved image for this control.
     fn display(state: MicState, configured: bool) -> Display;
 
     /// Whether a key press should publish [`COMMAND`](Self::COMMAND) right now.
     fn can_activate(state: MicState, configured: bool) -> bool;
-
-    /// Resolve a display [`Icon`] to a `data:` URI for one of this control's
-    /// embedded images.
-    fn icon_data_uri(icon: Icon) -> &'static str;
 }
 
 /// Microphone mute/unmute — the original (and currently only) control.
@@ -62,19 +67,37 @@ impl Control for MuteControl {
     const COMMAND: &'static str = r#"{"action":"toggle-mute"}"#;
 
     fn display(state: MicState, configured: bool) -> Display {
-        state::display(state, configured)
+        // SETUP: not configured yet. OFF: not in a call (presses are ignored).
+        // Otherwise reflect the live mute state on state index 1 (muted) or 0.
+        if !configured {
+            Display {
+                state_index: 0,
+                title: "SETUP",
+                image: MUTE_OFF.as_str(),
+            }
+        } else if !state.in_active_call() {
+            Display {
+                state_index: 0,
+                title: "OFF",
+                image: MUTE_OFF.as_str(),
+            }
+        } else if state.muted {
+            Display {
+                state_index: 1,
+                title: "MUTED",
+                image: MUTE_MUTED.as_str(),
+            }
+        } else {
+            Display {
+                state_index: 0,
+                title: "MIC",
+                image: MUTE_NORMAL.as_str(),
+            }
+        }
     }
 
     fn can_activate(state: MicState, configured: bool) -> bool {
-        state::can_toggle(state, configured)
-    }
-
-    fn icon_data_uri(icon: Icon) -> &'static str {
-        match icon {
-            Icon::Normal => MUTE_NORMAL.as_str(),
-            Icon::Muted => MUTE_MUTED.as_str(),
-            Icon::Off => MUTE_OFF.as_str(),
-        }
+        configured && state.in_active_call()
     }
 }
 
@@ -99,12 +122,48 @@ mod tests {
     }
 
     #[test]
-    fn mute_control_display_delegates_to_state() {
-        assert_eq!(
-            MuteControl::display(in_call(true), true),
-            state::display(in_call(true), true)
+    fn mute_display_setup_when_unconfigured() {
+        let d = MuteControl::display(MicState::default(), false);
+        assert_eq!(d.title, "SETUP");
+        assert_eq!(d.state_index, 0);
+    }
+
+    #[test]
+    fn mute_display_off_when_not_in_call_even_if_muted() {
+        let d = MuteControl::display(
+            MicState {
+                muted: true,
+                in_call: Some(false),
+            },
+            true,
         );
-        assert_eq!(MuteControl::display(in_call(true), true).title, "MUTED");
+        assert_eq!(d.title, "OFF");
+        assert_eq!(d.state_index, 0);
+        assert_eq!(d.image, MUTE_OFF.as_str());
+    }
+
+    #[test]
+    fn mute_display_mic_when_in_call_unmuted() {
+        let d = MuteControl::display(in_call(false), true);
+        assert_eq!(d.title, "MIC");
+        assert_eq!(d.state_index, 0);
+        assert_eq!(d.image, MUTE_NORMAL.as_str());
+    }
+
+    #[test]
+    fn mute_display_muted_when_in_call_muted() {
+        let d = MuteControl::display(in_call(true), true);
+        assert_eq!(d.title, "MUTED");
+        assert_eq!(d.state_index, 1);
+        assert_eq!(d.image, MUTE_MUTED.as_str());
+    }
+
+    #[test]
+    fn mute_display_images_are_data_uris_and_distinct() {
+        let normal = MuteControl::display(in_call(false), true).image;
+        let muted = MuteControl::display(in_call(true), true).image;
+        assert!(normal.starts_with("data:image/png;base64,"));
+        assert_ne!(normal, muted);
     }
 
     #[test]
@@ -112,17 +171,5 @@ mod tests {
         assert!(MuteControl::can_activate(in_call(false), true));
         assert!(!MuteControl::can_activate(in_call(false), false));
         assert!(!MuteControl::can_activate(MicState::default(), true));
-    }
-
-    #[test]
-    fn mute_control_resolves_each_icon() {
-        for icon in [Icon::Normal, Icon::Muted, Icon::Off] {
-            assert!(MuteControl::icon_data_uri(icon).starts_with("data:image/png;base64,"));
-        }
-        // Distinct images per state.
-        assert_ne!(
-            MuteControl::icon_data_uri(Icon::Normal),
-            MuteControl::icon_data_uri(Icon::Muted)
-        );
     }
 }
